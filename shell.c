@@ -1,4 +1,4 @@
-#include "main.h"
+#include "lists.h"
 
 /**
  * shell - implement shell functionality
