@@ -1,367 +1,135 @@
-#include "which.h"
-
-
+#include "main.h"
 
 /**
-
- * main - looks for files in the current PATH
-
- * @ac: number of commandline arguments
-
- * @av: array of commandline arguments
-
- * @env: array of environment variables
-
+ * get_full_name - gets full name of a given command
+ * @name: string
+ * @env_list: list of environment variables
  *
-
- * Return: 0 success. 1 otherwise
-
+ * Return: full name of given command . Otherwise NULL
  */
-
-int main(int ac, char **av, char **env)
-  
+char *get_full_name(char *name, list_t *env_list)
 {
-  
-  char *path, *full_path = NULL;
-  
-  unsigned int i;
-  
-  list_t *dir_l = NULL;
-  
-  char **dir_a = NULL;
-  
+	char *path, *fullname;
+	list_t *path_dir_list;
 
-  
-  if (ac < 2)
-    
-    {
-      
-      printf("Usage: _which filename ...\n");
-      
-      return (1);
-      
-    }
-  
+	if (name == NULL)
+		return (NULL);
 
-  
-  /* create environ linked list */
-  
+	/* get value of PATH */
+	path = _getenv(env_list, "PATH");
 
-  
-  /* get PATH */
-  
-  for (i = 0; env[i] != NULL; i++)
-    
-    {
-      
-      path = get_path(env[i], "PATH");
-      
-      if (path)
-	
-	break;
-      
-    }
-  
+	/* split path */
+	path_dir_list = split_string(path, ":");
 
-  
-  /* split path */
-  
-  dir_l = split_string(path, ":");
-  
-  dir_a = list_to_array(dir_l);
-  
-  if (dir_l)
-    
-    free_list(dir_l);
-  
+	/* get full path of filename */
+	fullname = get_full_path(name, path_dir_list);
 
-  
-  /* check if filename is in directories */
-  
-  for (i = 1; av[i]; i++)
-    
-    {
-      
-      full_path = get_full_path(av[i], dir_a);
-      
-      if (full_path)
-	
-	{
-	  
-	  printf("%s\n", full_path);
-	  
-	  free(full_path);
-	  
-	}
-      
-    }
-  
+	free_list(path_dir_list);
 
-  
-  /* free dir_a */
-  
-  for (i = 0; dir_a && dir_a[i]; i++)
-    
-    free(dir_a[i]);
-  
-
-  
-  if (dir_a)
-    
-    free(dir_a);
-  
-
-  
-  return (0);
-  
+	return (fullname);
 }
 
-
-
 /**
-
- * get_path - checks if a given string is the environment variable
-
- * @str: string
-
- * @var: string representing environment variable
-
- *
-
- * Return: path string if str is PATH. NULL otherwise
-
- */
-
-char *get_path(char *str, const char *var)
-  
-{
-  
-  char *path = NULL;
-  
-
-  
-  if (_strcmp(var, strtok(str, "=")) == 0)
-    
-    path = strtok(NULL, "\n");
-  
-
-  
-  return (path);
-  
-}
-
-
-
-/**
-
- * split_string - splits a given string using a given delimiter
-
- * @str: string to split
-
- * @delim: delimiter
-
- *
-
- * Return: list of strings
-
- */
-
-list_t *split_string(char *str, char *delim)
-  
-{
-  
-  char *next_str;
-  
-  list_t *strings = NULL;
-  
-
-  
-  if (str == NULL || delim == NULL)
-    
-    return (NULL);
-  
-
-  
-  /* get first string */
-  
-  add_node_end(&strings, strtok(str, delim));
-  
-
-  
-  /* get all other strings */
-  
-  while ((next_str = strtok(NULL, delim)))
-    
-    add_node_end(&strings, next_str);
-  
-
-  
-  return (strings);
-  
-}
-
-
-
-/**
-
  * get_full_path - checks if a given file is in PATH and returns its full path
-
  * @filename: filename as string
-
- * @dir_a: array of the directories in PATH
-
+ * @path_list: list of the directories in PATH
  *
-
  * Return: full path of filename. Otherwise NULL
-
  */
-
-char *get_full_path(char *filename, char **dir_a)
-  
+char *get_full_path(char *filename, list_t *path_list)
 {
-  
-  unsigned int i;
-  
-  char *full_path;
-  
-  struct stat sfile;
-  
+	char *full_path;
+	list_t *trav;
 
-  
-  if (filename == NULL || *filename == '\0')
-    
-    return (NULL);
-  
-
-  
-  if (filename[0] == '/' || filename[0] == '.')
-    
-    {
-      
-      if (access(filename, X_OK) == 0)
-	
+	if (filename == NULL || *filename == '\0')
 	{
-	  
-	  stat(filename, &sfile);
-	  
-	  if (sfile.st_mode & S_IFREG)
-	    
-	    return (_strdup(filename));
-	  
+		return (NULL);
 	}
-      
 
-      
-      return (NULL);
-      
-    }
-  
-
-  
-  for (i = 0; dir_a && dir_a[i]; i++)
-    
-    {
-      
-      /* get fullpath */
-      
-      full_path = create_path(dir_a[i], filename);
-      
-      if (full_path)
-	
+	/* check if filename starts with . or / */
+	if (filename[0] == '/' || filename[0] == '.')
 	{
-	  
-	  if (access(full_path, X_OK) == 0)
-	    
-	    {
-	      
-	      stat(full_path, &sfile);
-	      
-	      if (sfile.st_mode & S_IFREG)
-		
-		return (full_path);
-	      
-	    }
-	  
-	  free(full_path);
-	  
+		if (is_command(filename))
+			return (_strdup(filename));
+
+		return (NULL);
 	}
-      
-    }
-  
-  return (NULL);
-  
+
+	/* check for filename in all the directories */
+	for (trav = path_list; trav; trav = trav->next)
+	{
+		/* get fullpath */
+		full_path = create_path(trav->name, filename);
+		if (full_path)
+		{
+			if (is_command(full_path))
+				return (full_path);
+
+			free(full_path);
+		}
+	}
+
+	return (NULL);
 }
 
+/**
+ * create_path - concatenates directory name and filename to create full path
+ * @dir: directory name
+ * @filename: filename
+ *
+ * Return: new string representing full file path. Otherwise NULL
+ */
+char *create_path(char *dir, char *filename)
+{
+	unsigned int i, j, k, len_d, len_f;
+	char *full_path;
 
+	if (dir == NULL || filename == NULL)
+		return (NULL);
+
+	len_d = _strlen(dir);
+	len_f = _strlen(filename);
+
+	/* allocate space for new string */
+	full_path = malloc(sizeof(char) * (len_d + len_f + 2));
+	if (full_path == NULL)
+		return (NULL);
+
+	/* copy contents of dir */
+	for (i = 0, k = 0; i < len_d; i++, k++)
+		full_path[k] = dir[i];
+
+	full_path[k++] = '/';
+
+	/* copy contents of filename */
+	for (j = 0; j < len_f; j++, k++)
+		full_path[k] = filename[j];
+
+	full_path[k] = '\0';
+
+	return (full_path);
+}
 
 /**
-
- * create_path - concatenates directory name and filename to create full path
-
- * @dir: directory name
-
- * @filename: filename
-
+ * is_command - checks if a given filename is a valid command
+ * @filename: string
  *
-
- * Return: new string representing full file path. Otherwise NULL
-
+ * Return: 1 if filename is valid command. 0 otherwise.
  */
-
-char *create_path(char *dir, char *filename)
-  
+int is_command(char *filename)
 {
-  
-  unsigned int i, j, k, len_d, len_f;
-  
-  char *full_path;
-  
+	struct stat sfile;
 
-  
-  if (dir == NULL || filename == NULL)
-    
-    return (NULL);
-  
+	if (filename == NULL)
+		return (0);
 
-  
-  len_d = _strlen(dir);
-  
-  len_f = _strlen(filename);
-  
+	/* if file exists and can be executed */
+	if (access(filename, X_OK) == 0)
+	{
+		stat(filename, &sfile);
+		if (sfile.st_mode & S_IFREG) /* ensure it's a regular file */
+			return (1);
+	}
 
-  
-  full_path = malloc(sizeof(char) * (len_d + len_f + 2));
-  
-  if (full_path == NULL)
-    
-    return (NULL);
-  
-
-  
-  /* copy contents of dir */
-  
-  for (i = 0, k = 0; i < len_d; i++, k++)
-    
-    full_path[k] = dir[i];
-  
-
-  
-  full_path[k++] = '/';
-  
-
-  
-  /* copy contents of filename */
-  
-  for (j = 0; j < len_f; j++, k++)
-    
-    full_path[k] = filename[j];
-  
-
-  
-  full_path[k] = '\0';
-  
-
-  
-  return (full_path);
-  
+	return (0);
 }
