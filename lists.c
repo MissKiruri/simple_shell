@@ -1,26 +1,4 @@
-#include "lists.h"
-
-/* REMOVE THIS!!! */
-/**
- * print_list - prints all the elements of a list_t list in a given format
- * @h: pointer to a list_t
- *
- * Return: number of nodes in given list_t
- */
-size_t print_list(const list_t *h)
-{
-	size_t count = 0;
-
-	while (h != NULL)
-	{
-		printf("%s\n", h->name);
-
-		count++;
-		h = h->next;
-	}
-
-	return (count);
-}
+#include "main.h"
 
 /**
  * add_node_end - adds a new node at the end of a list_s list
