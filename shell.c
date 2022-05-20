@@ -1,219 +1,155 @@
 #include "main.h"
 
 /**
- * shell - implement shell functionality
- * @env_list: list of environment variables
- * @shell_name: name of shell program
+ * shell - UNIX shell
  *
- * Return: 0 success. Non-zero otherwise
+ * @build: input build
  */
-int shell(list_t *env_list, char *shell_name)
+
+void shell(config *build)
 {
-	char *input, *full_name;
-	list_t *input_list;
-	char **input_array;
-	int built_ret, exec_ret;
-	char *error_message[4];
-
-	error_message_init(error_message, shell_name, NULL);
-
-	while (1)
+	while (true)
 	{
-		input = get_input();
-		if (input == NULL)
-			return (0);
-
-		input_list = split_string(input, " "); /* check input */
-		if (input_list == NULL || input[0] == '\n')
-		{
-			free(input);
+		getInputAndPrompt(build);
+		if (splitString(build) == false)
 			continue;
-		}
-
-		/* check if input is a built-in command */
-		built_ret = get_built(input_list, shell_name, env_list);
-		if (built_ret != -1)
-		{
-			free_input(input, input_list, NULL);
-			if (built_ret < -1)
-				continue;
-			else
-				return (built_ret);
-		}
-
-		/* check if 1st string is a valid command */
-		error_message[1] = input_list->name;
-		full_name = get_full_name(input_list->name, env_list);
-		if (full_name == NULL)
-		{
-			error_message[2] = "not found";
-			print_error(error_message);
-			free_input(input, input_list, NULL);
+		if (findBuiltIns(build) == true)
 			continue;
-		}
-
-		/* change input_list to input_array */
-		input_array = list_to_array(input_list);
-		if (input_array == NULL)
-		{
-			error_message[2] = "malloc failed";
-			print_error(error_message);
-			free(full_name);
-			free_input(input, input_list, NULL);
-			continue;
-		}
-
-		/* execute command */
-		exec_ret = execute(input_array, full_name, shell_name);
-		if (exec_ret < 0)
-		{
-			free_input(input, input_list, input_array);
-			free(full_name);
-			return (-exec_ret);
-		}
-
-		free(full_name);
-		free_input(input, input_list, input_array);
+		checkPath(build);
+		forkAndExecute(build);
 	}
-
-	return (0);
 }
 
 /**
- * get_input - gets input from the terminal
- *
- * Return: string input. Otherwise NULL
+ * getInputAndPrompt - check stdin and retrieves next line; handles
+ * prompt display
+ * @build: input build
  */
-char *get_input(void)
+void getInputAndPrompt(config *build)
 {
-	char *buffer = NULL;
+	register int len;
 	size_t bufferSize = 0;
+	char *ptr, *ptr2;
 
+	build->args = NULL;
+	build->envList = NULL;
+	build->lineCounter++;
 	if (isatty(STDIN_FILENO))
 		prompt();
-
-	if (getline(&buffer, &bufferSize, stdin) == -1)
+	len = getline(&build->buffer, &bufferSize, stdin);
+	if (len == EOF)
 	{
+		freeMembers(build);
 		if (isatty(STDIN_FILENO))
-			write(STDOUT_FILENO, "\n", 2);
+			newLine();
+		if (build->errorStatus)
+			exit(build->errorStatus);
+		exit(EXIT_SUCCESS);
 
-		free(buffer);
-		return (NULL);
 	}
-
-	/* replace tabs with spaces */
-	str_rep(buffer, '\t', ' ');
-	return (_strlen(buffer) == 1 ? buffer : _strtok(buffer, "\n"));
+	ptr = _strchr(build->buffer, '\n');
+	ptr2 = _strchr(build->buffer, '\t');
+	if (ptr || ptr2)
+		nullByte(build->buffer, len - 1);
+	stripComments(build->buffer);
 }
 
 /**
- * print_error - prints given error message to stderr
- * @error_message: array of strings composing error message
- */
-void print_error(char **error_message)
-{
-	int i;
-	char *str;
-
-	for (i = 0; i < 4; i++)
-	{
-		str = error_message[i];
-
-		if (str)
-		{
-			if (i > 0)
-				write(STDERR_FILENO, ": ", 3);
-
-			write(STDERR_FILENO, str, _strlen(str) + 1);
-
-			if (i == 0)
-				write(STDERR_FILENO, ": 1", 4);
-		}
-	}
-
-	write(STDERR_FILENO, "\n", 2);
-}
-
-/**
- * prompt - displays shell prompt
- */
-void prompt(void)
-{
-	char *prompt = "$ ";
-
-	write(STDOUT_FILENO, prompt, _strlen(prompt) + 1);
-}
-
-/**
- * free_input - frees given memory buffers
- * @input: string representing input
- * @input_list: list representing input
- * @input_array: array of strings representing input
- */
-void free_input(char *input, list_t *input_list, char **input_array)
-{
-	if (input)
-		free(input);
-
-	if (input_list)
-		free_list(input_list);
-
-	if (input_array)
-		free_array(input_array);
-}
-
-/**
- * execute - executes a given input command
- * @input_array: array of strings containing input command
- * @command: name of command to execute
- * @shell_name: name of shell program
+ * stripComments - remove comments from input string
  *
- * Return: 0 success. Otherwise negative integer
- **/
-int execute(char **input_array, char *command, char *shell_name)
+ * @str: input string
+ * Return: length of remaining string
+ */
+void stripComments(char *str)
 {
-	pid_t child_pid;
-	int status;
-	char *error_message[4];
+	register int i = 0;
+	_Bool notFirst = false;
 
-	error_message_init(error_message, shell_name, command);
-
-	child_pid = fork();
-	if (child_pid == -1)
+	while (str[i])
 	{
-		error_message[2] = "fork error";
-		print_error(error_message);
-		return (-1);
-	}
-	else if (child_pid == 0) /* execute command */
-	{
-		if (execve(command, input_array, NULL) == -1)
+		if (i == 0 && str[i] == '#')
 		{
-			error_message[2] = "execve error";
-			print_error(error_message);
-			return (-2);
+			nullByte(str, i);
+			return;
 		}
+		if (notFirst)
+		{
+			if (str[i] == '#' && str[i - 1] == ' ')
+			{
+				nullByte(str, i);
+				return;
+			}
+		}
+		i++;
+		notFirst = true;
 	}
-	else
+}
+
+/**
+ * forkAndExecute - fork current build and execute processes
+ *
+ * @build: input build
+ */
+
+void forkAndExecute(config *build)
+{
+	int status;
+	pid_t f1 = fork();
+
+	convertLLtoArr(build);
+	if (f1 == -1)
+	{
+		perror("error\n");
+		freeMembers(build);
+		freeArgs(build->envList);
+		exit(1);
+	}
+	if (f1 == 0)
+	{
+		if (execve(build->fullPath, build->args, build->envList) == -1)
+		{
+			errorHandler(build);
+			freeMembers(build);
+			freeArgs(build->envList);
+			if (errno == ENOENT)
+				exit(127);
+			if (errno == EACCES)
+				exit(126);
+		}
+	} else
 	{
 		wait(&status);
-
 		if (WIFEXITED(status))
-			return (WEXITSTATUS(status));
+			build->errorStatus = WEXITSTATUS(status);
+		freeArgsAndBuffer(build);
+		freeArgs(build->envList);
 	}
-
-	return (0);
 }
 
-/**error_message_init - initialize error_message array with given values
- *@error_message: error message array
- *@shell_name: 1st value
- *@command: 2nd value
- **/
-void error_message_init(char **error_message, char *shell_name, char *command)
+/**
+ * convertLLtoArr - convert linked list to array
+ * @build: input build
+ */
+void convertLLtoArr(config *build)
 {
-	error_message[0] = shell_name;
-	error_message[1] = command;
-	error_message[2] = NULL;
-	error_message[3] = NULL;
+	register int i = 0;
+	size_t count = 0;
+	char **envList = NULL;
+	l_list *tmp = build->env;
+
+	count = list_len(build->env);
+	envList = malloc(sizeof(char *) * (count + 1));
+	if (!envList)
+	{
+		perror("Malloc failed\n");
+		exit(1);
+	}
+	while (tmp)
+	{
+		envList[i] = _strdup(tmp->string);
+		tmp = tmp->next;
+		i++;
+	}
+	envList[i] = NULL;
+	build->envList = envList;
 }

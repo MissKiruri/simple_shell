@@ -1,97 +1,168 @@
-#ifndef MAIN_H
-#define MAIN_H
+#ifndef __MAIN_H__
+#define __MAIN_H__
 
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <fcntl.h>           /* Definition of AT_* constants */
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <unistd.h>
 #include <limits.h>
+#include <errno.h>
+
+#ifndef _Bool
+    #define _Bool bool
+#endif
+
+#define BUFSIZE 256
+#define ENOSTRING 1106
+#define EILLEGAL 227
+#define EWSIZE 410
+#define ENOBUILTIN 415
+#define EBADCD 726
+
+typedef unsigned int uint;
+extern char **environ;
 
 /**
- * struct list_s - singly linked list of values
- * @name: string
- * @value: string
- * @next: points to the next node
+ * struct linkedList - linked list
  *
- * Description: singly linked list node structure
+ * @string: env variable path name
+ * @next: pointer to the next node
  */
-typedef struct list_s
+
+typedef struct linkedList
 {
-	char *name;
-	char *value;
-	struct list_s *next;
-} list_t;
+	char *string;
+	struct linkedList *next;
+} l_list;
 
 /**
- * struct built_s - Struct built_s
- * @name: built-in command
- * @f: function associated
+ * struct configurations - configuration of build settings
  *
- * Description: struct representing shell built-in command
+ * @env: environment variables
+ * @envList: array of env variables to put into execve
+ * @args: array of arguments
+ * @buffer: user input buffer
+ * @path: array of $PATH locations
+ * @fullPath: string of path with correct prepended $PATH
+ * @shellName: name of the program
+ * @lineCounter: counter of lines users have entered
+ * @errorStatus: error status of last child process
  */
-typedef struct built_s
+
+typedef struct configurations
 {
-	char *name;
-	int (*f)(list_t *input_list, char *shell_name, list_t **env_list_ptr);
-} built_s;
+	l_list *env;
+	char **envList;
+	char **args;
+	char *buffer;
+	char *path;
+	char *fullPath;
+	char *shellName;
+	unsigned int lineCounter;
+	int errorStatus;
+} config;
 
-/* main.c */
-void sig_handler(int sig);
+/**
+ * struct builtInCommands - commands associated with shell
+ *
+ * @cmd: input command
+ * @func: commund function
+ */
 
-/* env_list.c */
-list_t *create_env(char **env, list_t *env_list);
-char *_getenv(list_t *env_list, char *name);
-void print_env(list_t *env_list);
-int _setenv(list_t *env_list, const char *name, const char *value, int ow);
-int _unsetenv(list_t *env_list, const char *name);
+typedef struct builtInCommands
+{
+	char *cmd;
+	int (*func)(config *build);
+} type_b;
 
-/* lists.c */
-list_t *add_node_end(list_t **head, const char *name, const char *value);
-list_t *create_node(const char *name, const char *value);
-list_t *split_string(char *str, char *delim);
-void free_node(list_t *h);
-void free_list(list_t *h);
-size_t list_len(const list_t *h);
-char **list_to_array(const list_t *h);
-void free_array(char **arr);
-int find_name(list_t *h, const char *name);
-int update_value(list_t *h, int index, const char *value);
-int delete_node_index(list_t **head, int index);
-
-/* shell.c */
-int shell(list_t *env_list, char *shell_name);
-char *get_input(void);
-void print_error(char **error_message);
+/* shell and system functions */
+_Bool findBuiltIns(config *build);
+config *configInt(config *build);
+void shell(config *build);
+void getInputAndPrompt(config *build);
+void newLine(void);
+void nullByte(char *str, unsigned int idx);
 void prompt(void);
-void free_input(char *input, list_t *input_list, char **input_array);
-int execute(char **input_array, char *command, char *shell_name);
-void error_message_init(char **error_message, char *shell_name, char *command);
+void signalHandler(int sigint);
+int countArgs(char **args);
 
-/* built.c */
-int get_built(list_t *input_list, char *shell_name, list_t *env_list);
-int exit_shell(list_t *input_list, char *shell_name, list_t **env_list_ptr);
-int env_func(list_t *input_list, char *shell_name, list_t **env_list_ptr);
-int setenv_func(list_t *input_list, char *shell_name, list_t **env_list_ptr);
-int unsetenv_func(list_t *input_list, char *shell_name, list_t **env_list_ptr);
+void forkAndExecute(config *build);
+void getInputAndPrompt(config *build);
+char *_getenv(char *input, char **environ);
+_Bool checkPath(config *build);
+_Bool checkEdgeCases(config *build);
+int envFunc(config *build);
+int setenvFunc(config *build);
+int unsetenvFunc(config *build);
 
-/* which.c */
-char *get_full_name(char *name, list_t *env_list);
-char *get_full_path(char *filename, list_t *path_list);
-char *create_path(char *dir, char *filename);
-int is_command(char *filename);
+int cdFunc(config *build);
+_Bool cdToHome(config *build);
+_Bool cdToPrevious(config *build);
+_Bool cdToCustom(config *build);
+_Bool updateEnviron(config *build);
+int updateOld(config *build);
+_Bool updateCur(config *build, int index);
 
-/* strings.c */
-char *_strcpy(char *dest, const char *src);
-unsigned int _strlen(const char *str);
-int _strcmp(const char *s1, const char *s2);
-char *_strdup(const char *str);
-char *_strtok(char *str, const char *delim);
-int is_in_str(const char *str, char c);
-int _atoi(char *str);
-void str_rep(char *str, char c1, char c2);
+/* help shel functions */
+int helpFunc(config *build);
+int helpExit(config *build);
+int helpEnv(config *build);
+int helpHistory(config *build);
+int displayHelpMenu(void);
+int helpAlias(config *build);
+int helpCd(config *build);
+int helpSetenv(config *build);
+int helpUnsetenv(config *build);
+int helpHelp(config *build);
+
+int historyFunc(config *build);
+int aliasFunc(config *build);
+
+int exitFunc(config *build);
+
+void errorHandler(config *build);
+char *getErrorMessage(void);
+unsigned int countDigits(int num);
+
+/* linked list functions */
+l_list *addNode(l_list **head, char *str);
+l_list *addNodeEnd(l_list **head, char *str);
+size_t list_len(l_list *h);
+size_t printList(const l_list *h);
+int deleteNodeAtIndex(l_list **head, unsigned int index);
+void convertLLtoArr(config *build);
+l_list *generateList(char **arr);
+int searchNode(l_list *head, char *str);
+l_list *addNodeAtIndex(l_list **head, int index, char *str);
+char *getNodeAtIndex(l_list *head, unsigned int index);
+
+/* string functions */
+int _strlen(char *s);
+int _strcmp(char *s1, char *s2);
+char *_strcpy(char *dest, char *src);
+char *_strdup(char *str);
+char *_strcat(char *dest, char *src);
+int _isalpha(int c);
+char *_strtok(char *str, char *delim);
+char *_strchr(char *s, char c);
+int _strcspn(char *string, char *chars);
+void stripComments(char *str);
+int _atoi(char *s);
+char *itoa(unsigned int num);
+unsigned int countWords(char *str);
+unsigned int countWords(char *s);
+_Bool isSpace(char c);
+_Bool splitString(config *build);
+
+/* memory freeing functions */
+void freeMembers(config *build);
+void freeArgs(char **args);
+void freeArgsAndBuffer(config *build);
+void freeList(l_list *head);
 
 #endif

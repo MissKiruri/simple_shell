@@ -1,49 +1,43 @@
 #include "main.h"
 
 /**
- * main - implements super simple shell
+ * main - program entry point
  *
- * @ac: number of commandline arguments
- * @av: array of commandline arguments
- * @env: array of environment variables
+ * @argc: arguments count
+ * @argv: arguments vector
  *
- * Return: 0 success. 1 otherwise
+ * Return: 0 or -1
  */
-int main(int ac, char **av, char **env)
+
+int main(int argc, char **argv)
 {
-	list_t *env_list = NULL;
-	int shell_return;
+	config build;
 
-	/* create env_list */
-	env_list = create_env(env, env_list);
-
-	/* handle SIGINT */
-	signal(SIGINT, sig_handler);
-
-	/* start shell */
-	shell_return = shell(env_list, av[0]);
-
-	/*check return value of shell */
-	if (shell_return)
-	{
-		free_list(env_list);
-		exit(shell_return);
-	}
-
-	(void)ac;
-
-	free_list(env_list);
-
+	(void)argc;
+	signal(SIGINT, signalHandler);
+	configInt(&build);
+	build.shellName = argv[0];
+	shell(&build);
 	return (0);
 }
 
 /**
- * sig_handler - handles SIGINT
- * @sig: SIGINT
+ * configInt - initialize member values for config struct
+ *
+ * @build: input build
+ * Return: build with initialized members
  */
-void sig_handler(int sig)
+
+config *configInt(config *build)
 {
-	signal(sig, sig_handler);
-	write(STDOUT_FILENO, "\n", 2);
-	prompt();
+	build->env = generateList(environ);
+	build->envList = NULL;
+	build->args = NULL;
+	build->buffer = NULL;
+	build->path = _getenv("PATH", environ);
+	build->fullPath = NULL;
+	build->lineCounter = 0;
+	build->shellName = NULL;
+	build->errorStatus = 0;
+	return (build);
 }
